@@ -1,0 +1,15 @@
+namespace: gitops-sample-dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+namePrefix: dev-
+
+labels:
+  - pairs:
+      environment: dev
+
+replicas:
+  - name: gitops-sample-app
+    count: 2

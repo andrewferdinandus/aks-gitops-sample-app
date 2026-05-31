@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitops-sample-content
+data:
+  index.html: |
+    <!doctype html>
+    <html>
+      <head>
+        <title>AKS GitOps Sample App</title>
+      </head>
+      <body>
+        <h1>AKS GitOps Sample App</h1>
+        <p>This page is deployed by GitOps.</p>
+        <p>Environment is controlled by the overlay.</p>
+      </body>
+    </html>

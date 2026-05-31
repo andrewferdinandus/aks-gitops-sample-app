@@ -1,0 +1,15 @@
+namespace: gitops-sample-prod
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+namePrefix: prod-
+
+labels:
+  - pairs:
+      environment: prod
+
+replicas:
+  - name: gitops-sample-app
+    count: 3

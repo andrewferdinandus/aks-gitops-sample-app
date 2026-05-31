@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitops-sample-app
+  labels:
+    app: gitops-sample-app
+spec:
+  type: ClusterIP
+  selector:
+    app: gitops-sample-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

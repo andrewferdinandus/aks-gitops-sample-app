@@ -1,0 +1,15 @@
+namespace: gitops-sample-qa
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+namePrefix: qa-
+
+labels:
+  - pairs:
+      environment: qa
+
+replicas:
+  - name: gitops-sample-app
+    count: 2
