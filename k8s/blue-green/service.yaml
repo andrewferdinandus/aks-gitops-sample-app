@@ -9,7 +9,7 @@ spec:
   type: ClusterIP
   selector:
     app: bluegreen-demo
-    version: blue
+    version: green
   ports:
     - name: http
       port: 80
