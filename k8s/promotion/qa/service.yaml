@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: promotion-demo
+  namespace: promotion-qa
+  labels:
+    app: promotion-demo
+    environment: qa
+spec:
+  type: ClusterIP
+  selector:
+    app: promotion-demo
+    environment: qa
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

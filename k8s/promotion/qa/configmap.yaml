@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promotion-demo-content
+  namespace: promotion-qa
+data:
+  index.html: |
+    <html>
+    <body>
+      <h1>Promotion Demo</h1>
+      <p>Environment: qa</p>
+      <p>Version: v1</p>
+    </body>
+    </html>
