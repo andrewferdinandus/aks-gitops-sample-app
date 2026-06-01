@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bluegreen-content-green
+  namespace: bluegreen-demo
+data:
+  index.html: |
+    <html>
+    <body>
+      <h1>Blue/Green Demo</h1>
+      <p>Active color: green</p>
+      <p>Version: v2</p>
+    </body>
+    </html>
