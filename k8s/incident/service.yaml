@@ -4,7 +4,7 @@ metadata:
   name: incident-demo
   namespace: incident-demo
   labels:
-    app: incident-demo
+    app: wrong-incident-demo
 spec:
   type: ClusterIP
   selector:
