@@ -1,0 +1,23 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: incident-demo
+  namespace: incident-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      namespace: platform-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /incident
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: incident-demo
+          port: 80

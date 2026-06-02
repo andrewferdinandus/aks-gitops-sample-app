@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: incident-demo
+  namespace: incident-demo
+  labels:
+    app: incident-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: incident-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

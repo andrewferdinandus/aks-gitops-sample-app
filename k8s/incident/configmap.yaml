@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: incident-demo-content
+  namespace: incident-demo
+data:
+  index.html: |
+    <html>
+    <body>
+      <h1>Incident Troubleshooting Demo</h1>
+      <p>Status: healthy</p>
+      <p>Version: v1</p>
+    </body>
+    </html>
