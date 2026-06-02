@@ -11,7 +11,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /viewer
+            value: /canary-viewer
       filters:
         - type: URLRewrite
           urlRewrite:
