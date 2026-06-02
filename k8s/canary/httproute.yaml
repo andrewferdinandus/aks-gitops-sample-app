@@ -15,7 +15,7 @@ spec:
       backendRefs:
         - name: canary-stable
           port: 80
-          weight: 0
+          weight: 100
         - name: canary-v2
           port: 80
-          weight: 100
+          weight: 0
