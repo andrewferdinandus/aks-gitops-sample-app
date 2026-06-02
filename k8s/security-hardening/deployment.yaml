@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-demo
+  namespace: security-demo
+  labels:
+    app: security-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: security-demo
+  template:
+    metadata:
+      labels:
+        app: security-demo
+    spec:
+      nodeSelector:
+        workload: user
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: content
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: content
+          configMap:
+            name: security-demo-content

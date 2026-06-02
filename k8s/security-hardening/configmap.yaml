@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-demo-content
+  namespace: security-demo
+data:
+  index.html: |
+    <html>
+    <body>
+      <h1>Security Hardening Demo</h1>
+      <p>Status: running</p>
+      <p>Mode: baseline insecure</p>
+    </body>
+    </html>
