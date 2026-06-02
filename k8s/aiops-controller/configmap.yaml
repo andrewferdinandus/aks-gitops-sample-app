@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aiops-controller-config
+  namespace: aiops-system
+data:
+  WATCH_NAMESPACE: incident-demo
+  AIOPS_NAMESPACE: aiops-system
+  REPORT_CONFIGMAP: aiops-latest-incident-report
+  POLL_SECONDS: "30"
+  INCIDENT_COOLDOWN_SECONDS: "120"

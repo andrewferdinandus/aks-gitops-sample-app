@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aiops-controller
+  namespace: aiops-system
+  labels:
+    app: aiops-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aiops-controller
+  template:
+    metadata:
+      labels:
+        app: aiops-controller
+    spec:
+      serviceAccountName: aiops-controller
+      containers:
+        - name: aiops-controller
+          image: docker.io/andrewferdi/aiops-controller:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: aiops-controller-config
+            - secretRef:
+                name: aiops-openai-secret
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 20
