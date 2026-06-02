@@ -4,8 +4,11 @@ resources:
   - namespace.yaml
   - configmap-stable.yaml
   - configmap-canary.yaml
+  - configmap-viewer.yaml
   - deployment-stable.yaml
   - deployment-canary.yaml
+  - deployment-viewer.yaml
   - service-stable.yaml
   - service-canary.yaml
+  - service-viewer.yaml
   - httproute.yaml

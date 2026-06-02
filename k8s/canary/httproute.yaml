@@ -11,11 +11,18 @@ spec:
     - matches:
         - path:
             type: PathPrefix
+            value: /viewer
+      backendRefs:
+        - name: canary-viewer
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
             value: /
       backendRefs:
         - name: canary-stable
           port: 80
-          weight: 100
+          weight: 90
         - name: canary-v2
           port: 80
-          weight: 0
+          weight: 10

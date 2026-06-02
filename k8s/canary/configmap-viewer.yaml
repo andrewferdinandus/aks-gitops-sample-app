@@ -1,0 +1,131 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canary-viewer-content
+  namespace: canary-demo
+data:
+  index.html: |
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Canary Traffic Viewer</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 40px;
+          line-height: 1.5;
+        }
+        .card {
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          padding: 20px;
+          max-width: 760px;
+        }
+        button {
+          padding: 10px 16px;
+          font-size: 16px;
+          cursor: pointer;
+        }
+        .result {
+          margin-top: 20px;
+          font-size: 18px;
+        }
+        .stable {
+          font-weight: bold;
+        }
+        .canary {
+          font-weight: bold;
+        }
+        pre {
+          background: #f6f6f6;
+          padding: 12px;
+          overflow: auto;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>Canary Traffic Viewer</h1>
+
+        <p>This page sends repeated requests to the active Gateway route and counts which backend responds.</p>
+
+        <p>
+          Stable backend = <strong>v1</strong><br>
+          Canary backend = <strong>v2</strong>
+        </p>
+
+        <button onclick="runTest(50)">Run 50 requests</button>
+        <button onclick="runTest(100)">Run 100 requests</button>
+        <button onclick="resetResults()">Reset</button>
+
+        <div class="result">
+          <p>Total requests: <span id="total">0</span></p>
+          <p class="stable">Stable responses: <span id="stable">0</span> (<span id="stablePct">0</span>%)</p>
+          <p class="canary">Canary responses: <span id="canary">0</span> (<span id="canaryPct">0</span>%)</p>
+          <p>Last response: <span id="last">none</span></p>
+        </div>
+
+        <h3>What this proves</h3>
+        <pre>
+90/10  -> most responses should be stable, some canary
+50/50  -> stable and canary should be close
+0/100  -> all responses should be canary
+100/0  -> all responses should be stable
+        </pre>
+      </div>
+
+      <script>
+        let total = 0;
+        let stable = 0;
+        let canary = 0;
+
+        function update() {
+          document.getElementById("total").textContent = total;
+          document.getElementById("stable").textContent = stable;
+          document.getElementById("canary").textContent = canary;
+
+          const stablePct = total ? Math.round((stable / total) * 100) : 0;
+          const canaryPct = total ? Math.round((canary / total) * 100) : 0;
+
+          document.getElementById("stablePct").textContent = stablePct;
+          document.getElementById("canaryPct").textContent = canaryPct;
+        }
+
+        function resetResults() {
+          total = 0;
+          stable = 0;
+          canary = 0;
+          document.getElementById("last").textContent = "none";
+          update();
+        }
+
+        async function runTest(count) {
+          resetResults();
+
+          for (let i = 0; i < count; i++) {
+            const response = await fetch("/?t=" + Date.now() + "-" + i, {
+              cache: "no-store"
+            });
+            const text = await response.text();
+
+            total++;
+
+            if (text.includes("Track: stable")) {
+              stable++;
+              document.getElementById("last").textContent = "stable v1";
+            } else if (text.includes("Track: canary")) {
+              canary++;
+              document.getElementById("last").textContent = "canary v2";
+            } else {
+              document.getElementById("last").textContent = "unknown response";
+            }
+
+            update();
+          }
+        }
+
+        update();
+      </script>
+    </body>
+    </html>
