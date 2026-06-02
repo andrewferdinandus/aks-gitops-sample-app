@@ -19,7 +19,7 @@ spec:
         workload: user
       containers:
         - name: nginx
-          image: nginx:not-a-real-tag
+          image: nginx:1.27-alpine
           ports:
             - name: http
               containerPort: 80
