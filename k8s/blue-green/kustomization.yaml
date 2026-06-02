@@ -6,4 +6,6 @@ resources:
   - configmap-green.yaml
   - deployment-blue.yaml
   - deployment-green.yaml
-  - service.yaml
+  - service-active.yaml
+  - service-blue-preview.yaml
+  - service-green-preview.yaml
