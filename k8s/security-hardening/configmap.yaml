@@ -9,6 +9,6 @@ data:
     <body>
       <h1>Security Hardening Demo</h1>
       <p>Status: running</p>
-      <p>Mode: baseline insecure</p>
+      <p>Mode: hardened</p>
     </body>
     </html>
