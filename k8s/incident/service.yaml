@@ -4,11 +4,11 @@ metadata:
   name: incident-demo
   namespace: incident-demo
   labels:
-    app: wrong-incident-demo
+    app: incident-demo
 spec:
   type: ClusterIP
   selector:
-    app: incident-demo
+    app: wrong-incident-demo
   ports:
     - name: http
       port: 80
