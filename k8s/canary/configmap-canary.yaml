@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canary-content-canary
+  namespace: canary-demo
+data:
+  index.html: |
+    <html>
+    <body>
+      <h1>Canary Demo</h1>
+      <p>Track: canary</p>
+      <p>Version: v2</p>
+    </body>
+    </html>

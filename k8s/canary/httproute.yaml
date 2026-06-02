@@ -1,0 +1,21 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary-demo
+  namespace: canary-demo
+spec:
+  parentRefs:
+    - name: public-gateway
+      namespace: platform-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /canary
+      backendRefs:
+        - name: canary-stable
+          port: 80
+          weight: 90
+        - name: canary-v2
+          port: 80
+          weight: 10

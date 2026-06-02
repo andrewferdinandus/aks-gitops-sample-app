@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: canary-stable
+  namespace: canary-demo
+  labels:
+    app: canary-demo
+    track: stable
+spec:
+  type: ClusterIP
+  selector:
+    app: canary-demo
+    track: stable
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
