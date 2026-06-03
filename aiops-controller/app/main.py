@@ -12,6 +12,8 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from openai import AzureOpenAI
 
+from github_pr import create_pr_from_report
+
 
 WATCH_NAMESPACE = os.getenv("WATCH_NAMESPACE", "incident-demo")
 AIOPS_NAMESPACE = os.getenv("AIOPS_NAMESPACE", "aiops-system")
@@ -32,7 +34,7 @@ EXPECTED_INCIDENT_IMAGE = os.getenv("EXPECTED_INCIDENT_IMAGE", "nginx:1.27-alpin
 EXPECTED_INCIDENT_APP_LABEL = os.getenv("EXPECTED_INCIDENT_APP_LABEL", "incident-demo")
 
 
-app = FastAPI(title="AKS AIOps Controller", version="0.2.0")
+app = FastAPI(title="AKS AIOps Controller", version="0.3.0")
 
 last_incident_signature: Optional[str] = None
 last_incident_time: float = 0
@@ -408,6 +410,7 @@ def analyze_with_ai(incident: Dict[str, Any], evidence: Dict[str, Any]) -> Dict[
             "confidence": "low",
         }
         report["patch_recommendation"] = build_patch_recommendation(incident, report)
+        report["pull_request_recommendation"] = create_pr_from_report(report)
         return report
 
     aoai = AzureOpenAI(
@@ -497,6 +500,7 @@ Do not return kubectl patch commands.
         report["fix_location"] = deterministic_fix
 
     report["patch_recommendation"] = build_patch_recommendation(incident, report)
+    report["pull_request_recommendation"] = create_pr_from_report(report)
     report["human_review_required"] = True
     report["apply_mode"] = "manual_gitops_only"
 
@@ -543,8 +547,9 @@ async def controller_loop() -> None:
                     "message": "No supported incident detected.",
                     "watch_namespace": WATCH_NAMESPACE,
                     "updated_at": now_iso(),
-                    "controller_version": "0.2.0",
+                    "controller_version": "0.3.0",
                     "patch_recommendation": None,
+                    "pull_request_recommendation": None,
                 }
                 write_report_configmap(latest_report)
                 await asyncio.sleep(POLL_SECONDS)
@@ -566,7 +571,7 @@ async def controller_loop() -> None:
             report = analyze_with_ai(incident, evidence)
             report["status"] = "incident_detected"
             report["updated_at"] = now_iso()
-            report["controller_version"] = "0.2.0"
+            report["controller_version"] = "0.3.0"
             report["controller_notes"] = {
                 "direct_cluster_changes": "not_performed",
                 "remediation_mode": "recommend_patch_only_gitops_safe",
@@ -581,7 +586,7 @@ async def controller_loop() -> None:
                 "status": "controller_error",
                 "message": str(exc),
                 "updated_at": now_iso(),
-                "controller_version": "0.2.0",
+                "controller_version": "0.3.0",
             }
 
         await asyncio.sleep(POLL_SECONDS)
@@ -595,7 +600,7 @@ async def startup_event() -> None:
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "updated_at": now_iso(), "version": "0.2.0"}
+    return {"status": "ok", "updated_at": now_iso(), "version": "0.3.0"}
 
 
 @app.get("/api/report")
@@ -618,6 +623,12 @@ def aiops_dashboard():
     patch_file = patch.get("file", "n/a")
     patch_mode = patch.get("apply_mode", "n/a")
     human_review = patch.get("human_review_required", latest_report.get("human_review_required", "n/a"))
+
+    pr = latest_report.get("pull_request_recommendation") or {}
+    pr_status = pr.get("status", "n/a")
+    pr_url = pr.get("url", "")
+    pr_branch = pr.get("branch", "n/a")
+    pr_reason = pr.get("reason", "")
 
     html_doc = f"""
 <!doctype html>
@@ -691,6 +702,13 @@ def aiops_dashboard():
     <p><strong>Apply mode:</strong> {html.escape(str(patch_mode))}</p>
     <p><strong>Human review required:</strong> {html.escape(str(human_review))}</p>
     <pre>{html.escape(str(patch_diff or "No patch recommendation is available."))}</pre>
+
+    <h2>Pull request recommendation</h2>
+    <p><strong>Status:</strong> {html.escape(str(pr_status))}</p>
+    <p><strong>Branch:</strong> {html.escape(str(pr_branch))}</p>
+    <p><strong>Reason:</strong> {html.escape(str(pr_reason))}</p>
+    <p><strong>URL:</strong> {f'<a href="{html.escape(str(pr_url))}" target="_blank" style="color:#93c5fd">{html.escape(str(pr_url))}</a>' if pr_url else 'n/a'}</p>
+    <p><strong>Auto merge:</strong> not performed</p>
 
     <h2>Raw report</h2>
     <pre>{html.escape(report_json)}</pre>
