@@ -18,7 +18,7 @@ spec:
       serviceAccountName: aiops-controller
       containers:
         - name: aiops-controller
-          image: docker.io/andrewferdi/aiops-controller:0.1.0
+          image: docker.io/andrewferdi/aiops-controller:0.2.0
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

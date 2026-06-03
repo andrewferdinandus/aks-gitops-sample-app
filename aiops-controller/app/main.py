@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import os
 import time
@@ -24,8 +25,14 @@ AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
 POLL_SECONDS = int(os.getenv("POLL_SECONDS", "30"))
 INCIDENT_COOLDOWN_SECONDS = int(os.getenv("INCIDENT_COOLDOWN_SECONDS", "120"))
 
+GITOPS_REPOSITORY = os.getenv("GITOPS_REPOSITORY", "aks-gitops-sample-app")
+INCIDENT_DEPLOYMENT_FILE = os.getenv("INCIDENT_DEPLOYMENT_FILE", "k8s/incident/deployment.yaml")
+INCIDENT_SERVICE_FILE = os.getenv("INCIDENT_SERVICE_FILE", "k8s/incident/service.yaml")
+EXPECTED_INCIDENT_IMAGE = os.getenv("EXPECTED_INCIDENT_IMAGE", "nginx:1.27-alpine")
+EXPECTED_INCIDENT_APP_LABEL = os.getenv("EXPECTED_INCIDENT_APP_LABEL", "incident-demo")
 
-app = FastAPI(title="AKS AIOps Controller", version="0.1.0")
+
+app = FastAPI(title="AKS AIOps Controller", version="0.2.0")
 
 last_incident_signature: Optional[str] = None
 last_incident_time: float = 0
@@ -53,13 +60,6 @@ def kube_clients():
         client.AppsV1Api(),
         client.CustomObjectsApi(),
     )
-
-
-def safe_obj(value: Any) -> Any:
-    try:
-        return json.loads(json.dumps(value, default=str))
-    except Exception:
-        return str(value)
 
 
 def pod_summary(pod: client.V1Pod) -> Dict[str, Any]:
@@ -215,11 +215,19 @@ def detect_incident(evidence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         for container in pod.get("containers", []):
             reason = container.get("waiting_reason")
             if reason in image_pull_reasons:
+                image = container.get("image") or "unknown"
                 return {
                     "incident_type": "image_pull_failure",
                     "affected_resource": f"Pod/{pod['name']}",
                     "symptom": f"Container {container['name']} is waiting with reason {reason}.",
-                    "signature": f"image_pull_failure:{pod['name']}:{container['name']}:{reason}",
+                    "signature": f"image_pull_failure:{pod['name']}:{container['name']}:{reason}:{image}",
+                    "deterministic_fix": {
+                        "repository": GITOPS_REPOSITORY,
+                        "file": INCIDENT_DEPLOYMENT_FILE,
+                        "field": "spec.template.spec.containers[0].image",
+                        "current_value": image,
+                        "expected_value": EXPECTED_INCIDENT_IMAGE,
+                    },
                 }
 
     pods = evidence["pods"]
@@ -238,11 +246,19 @@ def detect_incident(evidence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         ]
 
         if ep.get("ready_count", 0) == 0 and len(matching_pods) == 0 and len(pods) > 0:
+            current_app = selector.get("app", json.dumps(selector, sort_keys=True))
             return {
                 "incident_type": "service_empty_endpoints",
                 "affected_resource": f"Service/{svc['name']}",
                 "symptom": "Service has zero ready endpoints and its selector does not match any running pods.",
                 "signature": f"service_empty_endpoints:{svc['name']}:{json.dumps(selector, sort_keys=True)}",
+                "deterministic_fix": {
+                    "repository": GITOPS_REPOSITORY,
+                    "file": INCIDENT_SERVICE_FILE,
+                    "field": "spec.selector.app",
+                    "current_value": current_app,
+                    "expected_value": EXPECTED_INCIDENT_APP_LABEL,
+                },
             }
 
     return None
@@ -290,25 +306,95 @@ def collect_evidence() -> Dict[str, Any]:
         "events": warning_events,
         "httproutes": httproutes,
         "gitops_repository": {
-            "name": "aks-gitops-sample-app",
+            "name": GITOPS_REPOSITORY,
             "known_paths": [
-                "k8s/incident/deployment.yaml",
-                "k8s/incident/service.yaml",
+                INCIDENT_DEPLOYMENT_FILE,
+                INCIDENT_SERVICE_FILE,
                 "k8s/incident/httproute.yaml",
             ],
         },
     }
 
 
+def build_patch_recommendation(incident: Dict[str, Any], ai_report: Dict[str, Any]) -> Dict[str, Any]:
+    fix = ai_report.get("fix_location") or incident.get("deterministic_fix") or {}
+    incident_type = ai_report.get("incident_type") or incident.get("incident_type")
+
+    file_path = fix.get("file", "unknown")
+    field = fix.get("field", "unknown")
+    current_value = fix.get("current_value", "unknown")
+    expected_value = fix.get("expected_value", "unknown")
+
+    if isinstance(current_value, dict):
+        current_value_for_text = current_value.get("app", json.dumps(current_value, sort_keys=True))
+    else:
+        current_value_for_text = str(current_value)
+
+    if isinstance(expected_value, dict):
+        expected_value_for_text = expected_value.get("app", json.dumps(expected_value, sort_keys=True))
+    else:
+        expected_value_for_text = str(expected_value)
+
+    if incident_type == "service_empty_endpoints":
+        diff = f"""--- a/{INCIDENT_SERVICE_FILE}
++++ b/{INCIDENT_SERVICE_FILE}
+@@
+ spec:
+   type: ClusterIP
+   selector:
+-    app: {current_value_for_text}
++    app: {expected_value_for_text}
+   ports:
+     - name: http
+       port: 80
+       targetPort: 80
+"""
+        apply_hint = f"Update {INCIDENT_SERVICE_FILE} so spec.selector.app is {expected_value_for_text}."
+
+    elif incident_type == "image_pull_failure":
+        diff = f"""--- a/{INCIDENT_DEPLOYMENT_FILE}
++++ b/{INCIDENT_DEPLOYMENT_FILE}
+@@
+       containers:
+         - name: nginx
+-          image: {current_value_for_text}
++          image: {expected_value_for_text}
+           ports:
+             - name: http
+               containerPort: 80
+"""
+        apply_hint = f"Update {INCIDENT_DEPLOYMENT_FILE} so spec.template.spec.containers[0].image is {expected_value_for_text}."
+
+    else:
+        diff = ""
+        apply_hint = "No deterministic patch recommendation is available for this incident type."
+
+    return {
+        "format": "unified_diff",
+        "repository": GITOPS_REPOSITORY,
+        "file": file_path,
+        "field": field,
+        "current_value": current_value,
+        "expected_value": expected_value,
+        "diff": diff,
+        "apply_mode": "manual_gitops_only",
+        "human_review_required": True,
+        "safe_next_step": apply_hint,
+        "direct_cluster_changes": "not_performed",
+    }
+
+
 def analyze_with_ai(incident: Dict[str, Any], evidence: Dict[str, Any]) -> Dict[str, Any]:
+    deterministic_fix = incident.get("deterministic_fix", {})
+
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY:
-        return {
+        report = {
             "incident_type": incident["incident_type"],
             "affected_resource": incident["affected_resource"],
             "symptom": incident["symptom"],
             "root_cause": "Azure OpenAI environment variables are not configured.",
-            "fix_location": {
-                "repository": "aks-gitops-sample-app",
+            "fix_location": deterministic_fix or {
+                "repository": GITOPS_REPOSITORY,
                 "file": "unknown",
                 "field": "unknown",
                 "current_value": "unknown",
@@ -321,6 +407,8 @@ def analyze_with_ai(incident: Dict[str, Any], evidence: Dict[str, Any]) -> Dict[
             ],
             "confidence": "low",
         }
+        report["patch_recommendation"] = build_patch_recommendation(incident, report)
+        return report
 
     aoai = AzureOpenAI(
         azure_endpoint=AZURE_OPENAI_ENDPOINT,
@@ -351,12 +439,22 @@ Return valid compact JSON only with this exact shape:
   },
   "evidence": [],
   "recommended_safe_next_steps": [],
+  "patch_intent": {
+    "summary": "...",
+    "human_review_required": true,
+    "apply_mode": "manual_gitops_only"
+  },
   "confidence": "high|medium|low"
 }
+
+For service selector incidents, the fix file should be k8s/incident/service.yaml.
+For image pull incidents, the fix file should be k8s/incident/deployment.yaml.
+Do not return kubectl patch commands.
 """
 
     user_payload = {
         "detected_incident": incident,
+        "deterministic_fix_hint": deterministic_fix,
         "evidence": evidence,
     }
 
@@ -367,21 +465,21 @@ Return valid compact JSON only with this exact shape:
             {"role": "user", "content": json.dumps(user_payload, separators=(",", ":"))},
         ],
         temperature=0,
-        max_tokens=700,
+        max_tokens=900,
     )
 
     content = response.choices[0].message.content or "{}"
 
     try:
-        return json.loads(content)
+        report = json.loads(content)
     except json.JSONDecodeError:
-        return {
+        report = {
             "incident_type": incident["incident_type"],
             "affected_resource": incident["affected_resource"],
             "symptom": incident["symptom"],
             "root_cause": "AI returned non-JSON output.",
-            "fix_location": {
-                "repository": "aks-gitops-sample-app",
+            "fix_location": deterministic_fix or {
+                "repository": GITOPS_REPOSITORY,
                 "file": "unknown",
                 "field": "unknown",
                 "current_value": "unknown",
@@ -394,6 +492,15 @@ Return valid compact JSON only with this exact shape:
             ],
             "confidence": "low",
         }
+
+    if not report.get("fix_location") and deterministic_fix:
+        report["fix_location"] = deterministic_fix
+
+    report["patch_recommendation"] = build_patch_recommendation(incident, report)
+    report["human_review_required"] = True
+    report["apply_mode"] = "manual_gitops_only"
+
+    return report
 
 
 def write_report_configmap(report: Dict[str, Any]) -> None:
@@ -436,6 +543,8 @@ async def controller_loop() -> None:
                     "message": "No supported incident detected.",
                     "watch_namespace": WATCH_NAMESPACE,
                     "updated_at": now_iso(),
+                    "controller_version": "0.2.0",
+                    "patch_recommendation": None,
                 }
                 write_report_configmap(latest_report)
                 await asyncio.sleep(POLL_SECONDS)
@@ -457,9 +566,10 @@ async def controller_loop() -> None:
             report = analyze_with_ai(incident, evidence)
             report["status"] = "incident_detected"
             report["updated_at"] = now_iso()
+            report["controller_version"] = "0.2.0"
             report["controller_notes"] = {
                 "direct_cluster_changes": "not_performed",
-                "remediation_mode": "recommend_only_gitops_safe",
+                "remediation_mode": "recommend_patch_only_gitops_safe",
                 "cooldown_seconds": INCIDENT_COOLDOWN_SECONDS,
             }
 
@@ -471,6 +581,7 @@ async def controller_loop() -> None:
                 "status": "controller_error",
                 "message": str(exc),
                 "updated_at": now_iso(),
+                "controller_version": "0.2.0",
             }
 
         await asyncio.sleep(POLL_SECONDS)
@@ -484,7 +595,7 @@ async def startup_event() -> None:
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "updated_at": now_iso()}
+    return {"status": "ok", "updated_at": now_iso(), "version": "0.2.0"}
 
 
 @app.get("/api/report")
@@ -502,11 +613,17 @@ def aiops_dashboard():
     affected = latest_report.get("affected_resource", "none")
     confidence = latest_report.get("confidence", "n/a")
 
-    html = f"""
+    patch = latest_report.get("patch_recommendation") or {}
+    patch_diff = patch.get("diff", "")
+    patch_file = patch.get("file", "n/a")
+    patch_mode = patch.get("apply_mode", "n/a")
+    human_review = patch.get("human_review_required", latest_report.get("human_review_required", "n/a"))
+
+    html_doc = f"""
 <!doctype html>
 <html>
 <head>
-  <title>AKS AIOps Incident Analyzer</title>
+  <title>AKS AIOps Patch Recommendation</title>
   <style>
     body {{
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -519,7 +636,7 @@ def aiops_dashboard():
       border: 1px solid #374151;
       border-radius: 14px;
       padding: 24px;
-      max-width: 1100px;
+      max-width: 1200px;
     }}
     .badge {{
       display: inline-block;
@@ -528,6 +645,14 @@ def aiops_dashboard():
       background: #1d4ed8;
       color: white;
       font-size: 13px;
+    }}
+    .warning {{
+      padding: 12px;
+      border-radius: 10px;
+      background: #451a03;
+      border: 1px solid #f97316;
+      color: #fed7aa;
+      margin: 16px 0;
     }}
     pre {{
       white-space: pre-wrap;
@@ -547,18 +672,34 @@ def aiops_dashboard():
 </head>
 <body>
   <div class="card">
-    <h1>AKS AIOps Incident Analyzer</h1>
-    <p class="badge">{status}</p>
+    <h1>AKS AIOps Patch Recommendation</h1>
+    <p class="badge">{html.escape(str(status))}</p>
+
     <h2>Summary</h2>
-    <p><strong>Incident type:</strong> {incident_type}</p>
-    <p><strong>Affected resource:</strong> {affected}</p>
-    <p><strong>Root cause:</strong> {root_cause}</p>
-    <p><strong>Confidence:</strong> {confidence}</p>
-    <p class="muted">This controller recommends GitOps-safe remediation only. It does not patch production resources directly.</p>
+    <p><strong>Incident type:</strong> {html.escape(str(incident_type))}</p>
+    <p><strong>Affected resource:</strong> {html.escape(str(affected))}</p>
+    <p><strong>Root cause:</strong> {html.escape(str(root_cause))}</p>
+    <p><strong>Confidence:</strong> {html.escape(str(confidence))}</p>
+
+    <div class="warning">
+      Human review is required. This controller does not patch Kubernetes resources and does not commit to Git.
+      Apply recommendations only through your GitOps workflow.
+    </div>
+
+    <h2>Patch recommendation</h2>
+    <p><strong>File:</strong> {html.escape(str(patch_file))}</p>
+    <p><strong>Apply mode:</strong> {html.escape(str(patch_mode))}</p>
+    <p><strong>Human review required:</strong> {html.escape(str(human_review))}</p>
+    <pre>{html.escape(str(patch_diff or "No patch recommendation is available."))}</pre>
+
     <h2>Raw report</h2>
-    <pre>{report_json}</pre>
+    <pre>{html.escape(report_json)}</pre>
+
+    <p class="muted">
+      GitOps-safe mode: recommend only. No direct cluster changes are performed.
+    </p>
   </div>
 </body>
 </html>
 """
-    return HTMLResponse(html)
+    return HTMLResponse(html_doc)
