@@ -12,7 +12,7 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from openai import AzureOpenAI
 
-from github_pr import create_pr_from_report
+from app.github_pr import create_pr_from_report
 
 
 WATCH_NAMESPACE = os.getenv("WATCH_NAMESPACE", "incident-demo")
@@ -34,7 +34,7 @@ EXPECTED_INCIDENT_IMAGE = os.getenv("EXPECTED_INCIDENT_IMAGE", "nginx:1.27-alpin
 EXPECTED_INCIDENT_APP_LABEL = os.getenv("EXPECTED_INCIDENT_APP_LABEL", "incident-demo")
 
 
-app = FastAPI(title="AKS AIOps Controller", version="0.3.0")
+app = FastAPI(title="AKS AIOps Controller", version="0.3.1")
 
 last_incident_signature: Optional[str] = None
 last_incident_time: float = 0
@@ -547,7 +547,7 @@ async def controller_loop() -> None:
                     "message": "No supported incident detected.",
                     "watch_namespace": WATCH_NAMESPACE,
                     "updated_at": now_iso(),
-                    "controller_version": "0.3.0",
+                    "controller_version": "0.3.1",
                     "patch_recommendation": None,
                     "pull_request_recommendation": None,
                 }
@@ -571,7 +571,7 @@ async def controller_loop() -> None:
             report = analyze_with_ai(incident, evidence)
             report["status"] = "incident_detected"
             report["updated_at"] = now_iso()
-            report["controller_version"] = "0.3.0"
+            report["controller_version"] = "0.3.1"
             report["controller_notes"] = {
                 "direct_cluster_changes": "not_performed",
                 "remediation_mode": "recommend_patch_only_gitops_safe",
@@ -586,7 +586,7 @@ async def controller_loop() -> None:
                 "status": "controller_error",
                 "message": str(exc),
                 "updated_at": now_iso(),
-                "controller_version": "0.3.0",
+                "controller_version": "0.3.1",
             }
 
         await asyncio.sleep(POLL_SECONDS)
@@ -600,7 +600,7 @@ async def startup_event() -> None:
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "updated_at": now_iso(), "version": "0.3.0"}
+    return {"status": "ok", "updated_at": now_iso(), "version": "0.3.1"}
 
 
 @app.get("/api/report")
